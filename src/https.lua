@@ -14,13 +14,14 @@ local url    = require("socket.url")
 local try    = socket.try
 local table  = require("table")
 
-
-local _M={
-_VERSION   = "0.6",
-_COPYRIGHT = "LuaSec 0.6 - Copyright (C) 2009-2016 PUC-Rio",
+--
+-- Module
+--
+local _M = {
+  _VERSION   = "0.6",
+  _COPYRIGHT = "LuaSec 0.6 - Copyright (C) 2009-2016 PUC-Rio",
+  PORT       = 443,
 }
--- Default settings
-PORT = 443
 
 -- TLS configuration
 local cfg = {
@@ -94,9 +95,9 @@ local function tcp(params)
         end
         -- insert https default port, overriding http port inserted by LuaSocket
         if not u.port then
-           u.port = PORT
+           u.port = _M.PORT
            reqt.url = url.build(u)
-           reqt.port = PORT 
+           reqt.port = _M.PORT 
         end
         washttps = true
         return conn
