@@ -2,3 +2,4 @@
 /src/luasocket/*.o
 /*.dll
 /samples/certs/
+ssl.so
