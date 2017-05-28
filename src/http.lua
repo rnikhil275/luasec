@@ -15,8 +15,7 @@ local string = require("string")
 local headers = require("socket.headers")
 local base = _G
 local table = require("table")
-socket.http = {}
-local _M = socket.http
+local _M = {}
 
 -----------------------------------------------------------------------------
 -- Program constants
@@ -218,8 +217,17 @@ local function adjustheaders(reqt)
     }
     -- if we have authentication information, pass it along
     if reqt.user and reqt.password then
-        lower["authorization"] = 
-            "Basic " ..  (mime.b64(reqt.user .. ":" .. reqt.password))
+        lower["authorization"] =
+            "Basic " ..  (mime.b64(reqt.user .. ":" ..
+        url.unescape(reqt.password)))
+    end
+    local proxy = reqt.proxy or _M.PROXY
+    if proxy then
+        proxy = url.parse(proxy)
+        if proxy.user and proxy.password then
+            lower["proxy-authorization"] =
+                "Basic " ..  (mime.b64(proxy.user .. ":" .. proxy.password))
+        end
     end
     -- override with user headers
     for i,v in base.pairs(reqt.headers or lower) do

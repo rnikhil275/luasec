@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------------
--- LuaSec 0.5
+-- LuaSec 0.6
 -- Copyright (C) 2009-2014 PUC-Rio
 --
 -- Author: Pablo Musa
@@ -11,28 +11,23 @@ local ssl    = require("ssl")
 local ltn12  = require("ltn12")
 local http   = require("ssl.http")
 local url    = require("socket.url")
-
+local try    = socket.try
 local table  = require("table")
 
-local try          = socket.try
-local type         = type
-local pairs        = pairs
-local getmetatable = getmetatable
 
-module("ssl.https")
-
-_VERSION   = "0.5"
-_COPYRIGHT = "LuaSec 0.5 - Copyright (C) 2009-2014 PUC-Rio"
-
+local _M={
+_VERSION   = "0.6",
+_COPYRIGHT = "LuaSec 0.6 - Copyright (C) 2009-2016 PUC-Rio",
+}
 -- Default settings
 PORT = 443
 
+-- TLS configuration
 local cfg = {
-  protocol = "tlsv1",
-  options  = "all",
+  protocol = "any",
+  options  = {"all", "no_sslv2", "no_sslv3"},
   verify   = "none",
 }
-
 --------------------------------------------------------------------
 -- Auxiliar Functions
 --------------------------------------------------------------------
@@ -92,6 +87,7 @@ local function tcp(params)
         function conn:connect(host, port)
            try(self.sock:connect(host, port))
            self.sock = try(ssl.wrap(self.sock, params))
+           self.sock:sni(host)
            try(self.sock:dohandshake())
            reg(self, getmetatable(self.sock))
            return 1
@@ -126,7 +122,7 @@ end
 -- @param body optional (string)
 -- @return (string if url == string or 1), code, headers, status
 --
-function request(url, body)
+local function request(url, body)
   local result_table = {}
   local stringrequest = type(url) == "string"
   if stringrequest then
@@ -143,3 +139,6 @@ function request(url, body)
   end
   return res, code, headers, status
 end
+
+_M.request = request
+return _M
