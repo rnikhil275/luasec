@@ -15,6 +15,7 @@ local string = require("string")
 local headers = require("socket.headers")
 local base = _G
 local table = require("table")
+local ssl = require("ssl")
 local _M = {}
 
 -----------------------------------------------------------------------------
@@ -122,7 +123,11 @@ function metat.__index:sendrequestline(method, uri)
     local reqline = string.format("%s %s HTTP/1.1\r\n", method or "GET", uri)
     return self.try(self.c:send(reqline))
 end
-
+function metat.__index:sendconnectrequest(uri)
+    local reqline = string.format("%s %s HTTP/1.1\r\n", "CONNECT", uri)
+    print(uri.host)
+    return self.try(self.c:send(reqline))   
+end   
 function metat.__index:sendheaders(tosend)
     local canonic = headers.canonic
     local h = "\r\n"
@@ -228,6 +233,9 @@ local function adjustheaders(reqt)
             lower["proxy-authorization"] =
                 "Basic " ..  (mime.b64(proxy.user .. ":" .. proxy.password))
         end
+        if url.parse(reqt.url, default).scheme =="https" then
+            lower["connection"] = "keep-alive"
+        end
     end
     -- override with user headers
     for i,v in base.pairs(reqt.headers or lower) do
@@ -249,7 +257,7 @@ local function adjustrequest(reqt)
     local nreqt = reqt.url and url.parse(reqt.url, default) or {}
     -- explicit components override url
     for i,v in base.pairs(reqt) do nreqt[i] = v end
-    if nreqt.port == "" then nreqt.port = 80 end
+    if nreqt.port == "" then nreqt.port = _M.PORT end
     socket.try(nreqt.host and nreqt.host ~= "", 
         "invalid host '" .. base.tostring(nreqt.host) .. "'")
     -- compute uri if user hasn't overriden
@@ -257,6 +265,25 @@ local function adjustrequest(reqt)
     -- ajust host and port if there is a proxy
     nreqt.host, nreqt.port = adjustproxy(nreqt)
     -- adjust headers in request
+    nreqt.headers = adjustheaders(nreqt)
+    return nreqt
+end
+
+local function adjustforconnect(reqt)
+    -- add details from reqt to nreqt 
+    local nreqt = url.parse(reqt.url, default)
+    for i,v in base.pairs(reqt) do nreqt[i] = v end
+    -- modify nreqt for proxy
+    local proxy = reqt.proxy
+    if proxy then
+        proxy = url.parse(proxy)
+        nreqt.host, nreqt.port = proxy.host, proxy.port or 443
+    else
+        return nil, "specify proxy properly"
+    end 
+    -- modify uri for connect request  
+    nreqt.uri = reqt.uri or nreqt.authority .. ":" .. 443
+    -- adjust headers for connect request
     nreqt.headers = adjustheaders(nreqt)
     return nreqt
 end
@@ -301,16 +328,39 @@ end
 --[[local]] function trequest(reqt)
     -- we loop until we get what we want, or
     -- until we are sure there is no way to get it
-    local nreqt = adjustrequest(reqt)
+    if reqt.proxy then
+        if url.parse(reqt.url, default).scheme =="https" then
+            is_connect = true
+        else
+            -- just a normal proxy which luasocket already supports
+            is_connect = false
+        end
+    end
+
+    if is_connect then 
+        nreqt = adjustforconnect(reqt)
+        for k,v in pairs(nreqt) do print("",k,v) end
+    else
+        nreqt = adjustrequest(reqt)
+    end
+
     local h = _M.open(nreqt)
+    -- if reqt.proxy then h = _M.handletunnel() end
     -- send request line and headers
-    h:sendrequestline(nreqt.method, nreqt.uri)
+    if is_connect then 
+        h:sendconnectrequest(nreqt.uri)
+    else
+        h:sendrequestline(nreqt.method, nreqt.uri)
+    end
+
     h:sendheaders(nreqt.headers)
     -- if there is a body, send it
     if nreqt.source then
         h:sendbody(nreqt.headers, nreqt.source, nreqt.step) 
     end
     local code, status = h:receivestatusline()
+    print(code, status)
+
     -- if it is an HTTP/0.9 server, simply get the body and we are done
     if not code then
         h:receive09body(status, nreqt.sink, nreqt.step)
@@ -336,6 +386,7 @@ end
     h:close()
     return 1, code, headers, status
 end
+
 
 -- parses a shorthand form into the advanced table form.
 -- adds field `target` to the table. This will hold the return values.

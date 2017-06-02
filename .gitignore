@@ -3,3 +3,5 @@
 /*.dll
 /samples/certs/
 ssl.so
+/src/http-1.lua
+

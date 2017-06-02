@@ -73,10 +73,19 @@ local function tcp(params)
    params.mode = "client"
    -- upvalue to track https -> http redirection
    local washttps = false
+   local tunnel = false
    -- 'create' function for LuaSocket
    return function (reqt)
       local u = url.parse(reqt.url)
       if (reqt.scheme or u.scheme) == "https" then
+        if params.proxy then
+          washttps = true
+          tunnel = true
+          return socket.tcp()
+        end
+        if tunnel then
+          print("second chance")
+        end
         -- https, provide an ssl wrapped socket
         local conn = {}
         conn.sock = try(socket.tcp())
@@ -127,10 +136,8 @@ local function request(url, body)
   local result_table = {}
   local stringrequest = type(url) == "string"
   if stringrequest then
+    --proxy is not possible with stringrequest. so no modification here
     url = urlstring_totable(url, body, result_table)
-  end
-  if http.PROXY or url.proxy then
-    return nil, "proxy not supported"
   end
   -- New 'create' function to establish the proper connection
   url.create = url.create or tcp(url)
