@@ -16,8 +16,6 @@ local headers = require("socket.headers")
 local base = _G
 local table = require("table")
 local ssl = require("ssl")
-local try    = socket.try
-
 local _M = {}
 
 -----------------------------------------------------------------------------
@@ -115,7 +113,6 @@ function _M.open(reqt)
     h.try = socket.newtry(function() h:close() end)
     -- set timeout before connecting
     h.try(c:settimeout(_M.TIMEOUT))
-
     h.try(c:connect(reqt.host, reqt.port or _M.PORT))
     -- here everything worked
     return h
@@ -125,7 +122,7 @@ function metat.__index:sendrequestline(method, uri)
     local reqline = string.format("%s %s HTTP/1.1\r\n", method or "GET", uri)
     return self.try(self.c:send(reqline))
 end
-
+ 
 function metat.__index:sendheaders(tosend)
     local canonic = headers.canonic
     local h = "\r\n"
@@ -272,6 +269,8 @@ local function adjustrequest(reqt)
     nreqt.host, nreqt.port = adjustproxy(nreqt)
     -- adjust headers in request
     nreqt.headers = adjustheaders(nreqt)
+    for k,v in pairs(nreqt) do print("",k,v) end 
+
     return nreqt
 end
 
@@ -327,22 +326,32 @@ local cfg = {
     if  reqt.connectproxy then 
         print("------------------------------------")
         nreqt.method = "CONNECT"
-        for k,v in pairs(nreqt) do print("",k,v) end
         h:sendrequestline(nreqt.method, nreqt.uri)
-        local code, status = h:receivestatusline()
+        h:sendheaders(nreqt.headers)
+        local code, status = h:receivestatusline()       
         local headers = h:receiveheaders()
         if code == 200 then
             print("tunnel established")
-            -- if url.parse(reqt.url, default).scheme == "https" then
-            for k,v in pairs(nreqt) do print("",k,v) end
-            -- end
+            -- reqt.connectproxy = "false"
+            if url.parse(reqt.url, default).scheme == "https" then
+                -- wrap socket
+            -- for k,v in pairs(nreqt) do print("",k,v) end
+            else
+                nreqt.method = "GET"
+                -- nreqt.uri = adjustrequest(nreqt)
+                nreqt.host, nreqt.port = reqt.host, reqt.port
+                nreqt.uri = adjusturi(nreqt)
+                -- this is supposed to go through the tunnel
+                h:sendrequestline(nreqt.method, nreqt.uri)
+                h:sendheaders(nreqt.headers)
+            end
         end
 
-    else
-        h:sendrequestline(nreqt.method, nreqt.uri)
+    -- else
+    --     h:sendrequestline(nreqt.method, nreqt.uri)
     end
-    h:sendrequestline(nreqt.method, nreqt.uri)
-    h:sendheaders(nreqt.headers)
+    -- h:sendrequestline(nreqt.method, nreqt.uri)
+    -- h:sendheaders(nreqt.headers)
 
     -- if there is a body, send it
     if nreqt.source then
