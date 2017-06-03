@@ -16,6 +16,8 @@ local headers = require("socket.headers")
 local base = _G
 local table = require("table")
 local ssl = require("ssl")
+local try    = socket.try
+
 local _M = {}
 
 -----------------------------------------------------------------------------
@@ -58,7 +60,6 @@ local function receiveheaders(sock, headers)
     end
     return headers
 end
-
 -----------------------------------------------------------------------------
 -- Extra sources and sinks
 -----------------------------------------------------------------------------
@@ -114,6 +115,7 @@ function _M.open(reqt)
     h.try = socket.newtry(function() h:close() end)
     -- set timeout before connecting
     h.try(c:settimeout(_M.TIMEOUT))
+
     h.try(c:connect(reqt.host, reqt.port or _M.PORT))
     -- here everything worked
     return h
@@ -123,11 +125,7 @@ function metat.__index:sendrequestline(method, uri)
     local reqline = string.format("%s %s HTTP/1.1\r\n", method or "GET", uri)
     return self.try(self.c:send(reqline))
 end
-function metat.__index:sendconnectrequest(uri)
-    local reqline = string.format("%s %s HTTP/1.1\r\n", "CONNECT", uri)
-    print(uri.host)
-    return self.try(self.c:send(reqline))   
-end   
+
 function metat.__index:sendheaders(tosend)
     local canonic = headers.canonic
     local h = "\r\n"
@@ -201,15 +199,6 @@ local function adjusturi(reqt)
     return url.build(u)
 end
 
-local function adjustproxy(reqt)
-    local proxy = reqt.proxy or _M.PROXY
-    if proxy then
-        proxy = url.parse(proxy)
-        return proxy.host, proxy.port or 3128
-    else
-        return reqt.host, reqt.port
-    end
-end
 
 local function adjustheaders(reqt)
     -- default headers
@@ -233,7 +222,7 @@ local function adjustheaders(reqt)
             lower["proxy-authorization"] =
                 "Basic " ..  (mime.b64(proxy.user .. ":" .. proxy.password))
         end
-        if url.parse(reqt.url, default).scheme =="https" then
+        if reqt.connectproxy then
             lower["connection"] = "keep-alive"
         end
     end
@@ -251,6 +240,15 @@ local default = {
     path ="/",
     scheme = "http"
 }
+local function adjustproxy(reqt)
+    local proxy = reqt.proxy or _M.PROXY
+    if proxy then
+        proxy = url.parse(proxy)
+        return proxy.host, proxy.port or 3128
+    else
+        return reqt.host, reqt.port
+    end
+end
 
 local function adjustrequest(reqt)
     -- parse url if provided
@@ -261,7 +259,15 @@ local function adjustrequest(reqt)
     socket.try(nreqt.host and nreqt.host ~= "", 
         "invalid host '" .. base.tostring(nreqt.host) .. "'")
     -- compute uri if user hasn't overriden
-    nreqt.uri = reqt.uri or adjusturi(nreqt)
+    if reqt.connectproxy then
+        if url.parse(reqt.url, default).scheme == "https" then
+            nreqt.uri = reqt.uri or nreqt.authority .. ":" .. 443
+        else
+            nreqt.uri = reqt.uri or nreqt.authority .. ":" .. 80
+        end
+    else
+        nreqt.uri = reqt.uri or adjusturi(nreqt)
+    end   
     -- ajust host and port if there is a proxy
     nreqt.host, nreqt.port = adjustproxy(nreqt)
     -- adjust headers in request
@@ -269,24 +275,7 @@ local function adjustrequest(reqt)
     return nreqt
 end
 
-local function adjustforconnect(reqt)
-    -- add details from reqt to nreqt 
-    local nreqt = url.parse(reqt.url, default)
-    for i,v in base.pairs(reqt) do nreqt[i] = v end
-    -- modify nreqt for proxy
-    local proxy = reqt.proxy
-    if proxy then
-        proxy = url.parse(proxy)
-        nreqt.host, nreqt.port = proxy.host, proxy.port or 443
-    else
-        return nil, "specify proxy properly"
-    end 
-    -- modify uri for connect request  
-    nreqt.uri = reqt.uri or nreqt.authority .. ":" .. 443
-    -- adjust headers for connect request
-    nreqt.headers = adjustheaders(nreqt)
-    return nreqt
-end
+
 
 local function shouldredirect(reqt, code, headers)
     return headers.location and
@@ -303,7 +292,6 @@ local function shouldreceivebody(reqt, code)
     if code >= 100 and code < 200 then return nil end
     return 1
 end
-
 -- forward declarations
 local trequest, tredirect
 
@@ -324,42 +312,48 @@ local trequest, tredirect
     headers.location = headers.location or location
     return result, code, headers, status
 end
+local cfg = {
+  protocol = "any",
+  options  = {"all", "no_sslv2", "no_sslv3"},
+  verify   = "none",
+}
 
 --[[local]] function trequest(reqt)
     -- we loop until we get what we want, or
     -- until we are sure there is no way to get it
-    if reqt.proxy then
-        if url.parse(reqt.url, default).scheme =="https" then
-            is_connect = true
-        else
-            -- just a normal proxy which luasocket already supports
-            is_connect = false
-        end
-    end
-
-    if is_connect then 
-        nreqt = adjustforconnect(reqt)
-        for k,v in pairs(nreqt) do print("",k,v) end
-    else
-        nreqt = adjustrequest(reqt)
-    end
-
+    nreqt = adjustrequest(reqt)
     local h = _M.open(nreqt)
-    -- if reqt.proxy then h = _M.handletunnel() end
     -- send request line and headers
-    if is_connect then 
-        h:sendconnectrequest(nreqt.uri)
+    if  reqt.connectproxy then 
+        print("------------------------------------")
+        nreqt.method = "CONNECT"
+        for k,v in pairs(nreqt) do print("",k,v) end
+        h:sendrequestline(nreqt.method, nreqt.uri)
+        local code, status = h:receivestatusline()
+        local headers = h:receiveheaders()
+        if code == 200 then
+            print("tunnel established")
+            -- if url.parse(reqt.url, default).scheme == "https" then
+            for k,v in pairs(nreqt) do print("",k,v) end
+            -- end
+        end
+
     else
         h:sendrequestline(nreqt.method, nreqt.uri)
     end
-
+    h:sendrequestline(nreqt.method, nreqt.uri)
     h:sendheaders(nreqt.headers)
+
     -- if there is a body, send it
     if nreqt.source then
         h:sendbody(nreqt.headers, nreqt.source, nreqt.step) 
     end
     local code, status = h:receivestatusline()
     print(code, status)
+    -- if code == 200 then
+    --     nreqt =adjustrequest(nreqt)
+    --     h:sendrequestline(nreqt.method, nreqt.uri)
+    -- end
 
     -- if it is an HTTP/0.9 server, simply get the body and we are done
     if not code then
