@@ -58,6 +58,7 @@ local function receiveheaders(sock, headers)
     end
     return headers
 end
+
 -----------------------------------------------------------------------------
 -- Extra sources and sinks
 -----------------------------------------------------------------------------
@@ -107,7 +108,7 @@ local metat = { __index = {} }
 
 function _M.open(reqt)
     -- create socket with user connect function
-    local c = socket.try(reqt:create())   -- method call, passing reqt table as self!
+     local c = socket.try(reqt:create())   -- method call, passing reqt table as self!
     local h = base.setmetatable({ c = c }, metat)
     -- create finalized try
     h.try = socket.newtry(function() h:close() end)
@@ -117,7 +118,6 @@ function _M.open(reqt)
     -- here everything worked
     return h
 end
-
 function metat.__index:sendrequestline(method, uri)
     local reqline = string.format("%s %s HTTP/1.1\r\n", method or "GET", uri)
     return self.try(self.c:send(reqline))
@@ -220,7 +220,8 @@ local function adjustheaders(reqt)
                 "Basic " ..  (mime.b64(proxy.user .. ":" .. proxy.password))
         end
         if reqt.connectproxy then
-            lower["connection"] = "keep-alive"
+            -- lower["connection"] = "keep-alive"
+            lower["Proxy-Connection"]="keep-alive"
         end
     end
     -- override with user headers
@@ -269,8 +270,6 @@ local function adjustrequest(reqt)
     nreqt.host, nreqt.port = adjustproxy(nreqt)
     -- adjust headers in request
     nreqt.headers = adjustheaders(nreqt)
-    for k,v in pairs(nreqt) do print("",k,v) end 
-
     return nreqt
 end
 
@@ -311,11 +310,17 @@ local trequest, tredirect
     headers.location = headers.location or location
     return result, code, headers, status
 end
-local cfg = {
-  protocol = "any",
-  options  = {"all", "no_sslv2", "no_sslv3"},
-  verify   = "none",
-}
+-- forward calls to connection object
+local function reg(conn)
+   local mt = getmetatable(conn.c).__index
+   for name, method in pairs(mt) do
+      if type(method) == "function" then
+         conn[name] = function (self, ...)
+                         return method(self.c, ...)
+                      end
+      end
+   end
+end
 
 --[[local]] function trequest(reqt)
     -- we loop until we get what we want, or
@@ -324,34 +329,42 @@ local cfg = {
     local h = _M.open(nreqt)
     -- send request line and headers
     if  reqt.connectproxy then 
-        print("------------------------------------")
         nreqt.method = "CONNECT"
         h:sendrequestline(nreqt.method, nreqt.uri)
         h:sendheaders(nreqt.headers)
         local code, status = h:receivestatusline()       
         local headers = h:receiveheaders()
         if code == 200 then
-            print("tunnel established")
-            -- reqt.connectproxy = "false"
+            reqt.connectproxy = "false"
             if url.parse(reqt.url, default).scheme == "https" then
-                -- wrap socket
-            -- for k,v in pairs(nreqt) do print("",k,v) end
+
+                h.c = ssl.wrap(h.c, nreqt)
+                h.c:dohandshake()
+                reg(h, getmetatable(h.c))
+
+                nreqt.method = "GET"
+                nreqt.host, nreqt.port = reqt.host,reqt.port
+                nreqt.uri = adjusturi(nreqt)
+
+                h:sendrequestline(nreqt.method, nreqt.uri)
+                h:sendheaders(nreqt.headers)
+
             else
                 nreqt.method = "GET"
-                -- nreqt.uri = adjustrequest(nreqt)
                 nreqt.host, nreqt.port = reqt.host, reqt.port
                 nreqt.uri = adjusturi(nreqt)
                 -- this is supposed to go through the tunnel
                 h:sendrequestline(nreqt.method, nreqt.uri)
                 h:sendheaders(nreqt.headers)
             end
+        else
+            return nil, "Problem in establishing tunnel"
         end
 
-    -- else
-    --     h:sendrequestline(nreqt.method, nreqt.uri)
+    else
+        h:sendrequestline(nreqt.method, nreqt.uri)
+        h:sendheaders(nreqt.headers)
     end
-    -- h:sendrequestline(nreqt.method, nreqt.uri)
-    -- h:sendheaders(nreqt.headers)
 
     -- if there is a body, send it
     if nreqt.source then
