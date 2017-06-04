@@ -220,8 +220,9 @@ local function adjustheaders(reqt)
             lower["proxy-authorization"] =
                 "Basic " ..  (mime.b64(proxy.user .. ":" .. proxy.password))
         end
+        -- keep the connection alive to open a tunnel
         if reqt.connectproxy then
-            -- lower["connection"] = "keep-alive"
+            lower['connection'] = 'keep-alive'
             lower["Proxy-Connection"]="keep-alive"
         end
     end
@@ -259,6 +260,7 @@ local function adjustrequest(reqt)
         "invalid host '" .. base.tostring(nreqt.host) .. "'")
     -- compute uri if user hasn't overriden
     if reqt.connectproxy then
+        -- connect proxy has special needs for uri in connect request
         if url.parse(reqt.url, default).scheme == "https" then
             nreqt.uri = reqt.uri or nreqt.authority .. ":" .. _M.SSLPORT
         else
@@ -336,34 +338,23 @@ end
         local code, status = h:receivestatusline()       
         local headers = h:receiveheaders()
         if code == 200 then
-            reqt.connectproxy = "false"
+            reqt.connectproxy = false
             if url.parse(reqt.url, default).scheme == "https" then
-
-                h.c = ssl.wrap(h.c, nreqt)
-                h.c:dohandshake()
+                h.c = h.try(ssl.wrap(h.c, nreqt))
+                h.try(h.c:dohandshake())
                 reg(h, getmetatable(h.c))
-                nreqt.method = "GET"
-                nreqt.host, nreqt.port = reqt.host,reqt.port
-                nreqt.uri = adjusturi(nreqt)
-                h:sendrequestline(nreqt.method, nreqt.uri)
-                h:sendheaders(nreqt.headers)
-
-            else
-                nreqt.method = "GET"
-                nreqt.host, nreqt.port = reqt.host, reqt.port
-                nreqt.uri = adjusturi(nreqt)
-                -- this is supposed to go through the tunnel
-                h:sendrequestline(nreqt.method, nreqt.uri)
-                h:sendheaders(nreqt.headers)
             end
+            -- these go through the tunnel
+            nreqt.method = "GET"
+            nreqt.host, nreqt.port = reqt.host,reqt.port
+            nreqt.uri = adjusturi(nreqt)
         else
             return nil, "Problem in establishing tunnel"
         end
-
-    else
-        h:sendrequestline(nreqt.method, nreqt.uri)
-        h:sendheaders(nreqt.headers)
     end
+
+    h:sendrequestline(nreqt.method, nreqt.uri)
+    h:sendheaders(nreqt.headers)
 
     -- if there is a body, send it
     if nreqt.source then
