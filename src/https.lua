@@ -107,8 +107,8 @@ local function tcp(params)
         return conn
       else
         -- regular http, needs just a socket...
-        if washttps and params.redirect ~= "all" then
-          try(nil, "Unallowed insecure redirect https to http")
+        if washttps and params.unsaferedirect ~= true then
+          try(nil, "Unsafe redirects from HTTPS to HTTP not allowed")
         end
         return socket.tcp()
       end  

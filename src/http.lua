@@ -25,6 +25,7 @@ local _M = {}
 _M.TIMEOUT = 60
 -- default port for document retrieval
 _M.PORT = 80
+_M.SSLPORT = 443
 -- user agent field sent in request
 _M.USERAGENT = socket._VERSION
 
@@ -49,7 +50,7 @@ local function receiveheaders(sock, headers)
         -- unfold any folded values
         while string.find(line, "^%s") do
             value = value .. line
-            line = sock:receive()
+            line , err = sock:receive()
             if err then return nil, err end
         end
         -- save pair in table
@@ -259,9 +260,9 @@ local function adjustrequest(reqt)
     -- compute uri if user hasn't overriden
     if reqt.connectproxy then
         if url.parse(reqt.url, default).scheme == "https" then
-            nreqt.uri = reqt.uri or nreqt.authority .. ":" .. 443
+            nreqt.uri = reqt.uri or nreqt.authority .. ":" .. _M.SSLPORT
         else
-            nreqt.uri = reqt.uri or nreqt.authority .. ":" .. 80
+            nreqt.uri = reqt.uri or nreqt.authority .. ":" .. _M.PORT
         end
     else
         nreqt.uri = reqt.uri or adjusturi(nreqt)
@@ -341,11 +342,9 @@ end
                 h.c = ssl.wrap(h.c, nreqt)
                 h.c:dohandshake()
                 reg(h, getmetatable(h.c))
-
                 nreqt.method = "GET"
                 nreqt.host, nreqt.port = reqt.host,reqt.port
                 nreqt.uri = adjusturi(nreqt)
-
                 h:sendrequestline(nreqt.method, nreqt.uri)
                 h:sendheaders(nreqt.headers)
 
@@ -371,12 +370,6 @@ end
         h:sendbody(nreqt.headers, nreqt.source, nreqt.step) 
     end
     local code, status = h:receivestatusline()
-    print(code, status)
-    -- if code == 200 then
-    --     nreqt =adjustrequest(nreqt)
-    --     h:sendrequestline(nreqt.method, nreqt.uri)
-    -- end
-
     -- if it is an HTTP/0.9 server, simply get the body and we are done
     if not code then
         h:receive09body(status, nreqt.sink, nreqt.step)
