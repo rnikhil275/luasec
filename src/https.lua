@@ -10,10 +10,9 @@ local socket = require("socket")
 local ssl    = require("ssl")
 local ltn12  = require("ltn12")
 local http   = require("ssl.http")
-local url    = require("socket.url")
+local url1    = require("socket.url")
 local try    = socket.try
 local table  = require("table")
-
 --
 -- Module
 --
@@ -22,7 +21,6 @@ local _M = {
   _COPYRIGHT = "LuaSec 0.6 - Copyright (C) 2009-2016 PUC-Rio",
   PORT       = 443,
 }
-
 -- TLS configuration
 local cfg = {
   protocol = "any",
@@ -75,10 +73,11 @@ local function tcp(params)
    local washttps = false
    -- 'create' function for LuaSocket
    return function (reqt)
-      local u = url.parse(reqt.url)
+      local u = url1.parse(reqt.url)
       if (reqt.scheme or u.scheme) == "https" then
         if reqt.connectproxy then
           --give a normal socket for now. wrap it later if proxy responds and scheme is https
+          -- if scheme is not https then http.lua will use the normal proxy itself. 
           return socket.tcp()
         end
         -- https, provide an ssl wrapped socket
@@ -100,7 +99,7 @@ local function tcp(params)
         -- insert https default port, overriding http port inserted by LuaSocket
         if not u.port then
            u.port = _M.PORT
-           reqt.url = url.build(u)
+           reqt.url = url1.build(u)
            reqt.port = _M.PORT 
         end
         washttps = true
@@ -132,6 +131,14 @@ local function request(url, body)
   local stringrequest = type(url) == "string"
   if stringrequest then
     url = urlstring_totable(url, body, result_table)
+  end
+
+  -- separately set the connectproxy variable so that we can leverage the tunnel whenever 
+  -- there is a https url. 
+  if url.proxy then
+    if url1.parse(url.url, default).scheme == "https" then
+      url.connectproxy = true
+    end
   end
   -- New 'create' function to establish the proper connection
   url.create = url.create or tcp(url)

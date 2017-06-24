@@ -297,17 +297,37 @@ end
 local trequest, tredirect
 
 --[[local]] function tredirect(reqt, location)
-    local result, code, headers, status = trequest {
-        -- the RFC says the redirect URL has to be absolute, but some
-        -- servers do not respect that
-        url = url.absolute(reqt.url, location),
-        source = reqt.source,
-        sink = reqt.sink,
-        headers = reqt.headers,
-        proxy = reqt.proxy, 
-        nredirects = (reqt.nredirects or 0) + 1,
-        create = reqt.create
-    }   
+    if reqt.connectredirect == true then
+        local result, code, headers, status = trequest {
+            -- the RFC says the redirect URL has to be absolute, but some
+            -- servers do not respect that
+            url = url.absolute(reqt.url, location),
+            source = reqt.source,
+            sink = reqt.sink,
+            headers = reqt.headers,
+            proxy = reqt.proxy, 
+            nredirects = (reqt.nredirects or 0) + 1,
+            create = reqt.create,
+            connectproxy = reqt.connectproxy,
+            protocol = "any",
+            options  = {"all", "no_sslv2", "no_sslv3"},
+            verify   = "none",
+            mode = "client"
+        }
+    elseif reqt.connectredirect == false then
+        local result, code, headers, status = trequest {
+            -- the RFC says the redirect URL has to be absolute, but some
+            -- servers do not respect that
+            url = url.absolute(reqt.url, location),
+            source = reqt.source,
+            sink = reqt.sink,
+            headers = reqt.headers,
+            proxy = reqt.proxy, 
+            nredirects = (reqt.nredirects or 0) + 1,
+            create = reqt.create,
+            connectproxy = reqt.connectproxy
+        }
+    end
     -- pass location header back as a hint we redirected
     headers = headers or {}
     headers.location = headers.location or location
@@ -319,33 +339,32 @@ local function reg(conn)
    for name, method in pairs(mt) do
       if type(method) == "function" then
          conn[name] = function (self, ...)
-                         return method(self.c, ...)
+                        return method(self.c, ...)
                       end
       end
    end
 end
-
 --[[local]] function trequest(reqt)
     -- we loop until we get what we want, or
     -- until we are sure there is no way to get it
     nreqt = adjustrequest(reqt)
-    local h = _M.open(nreqt)
-    -- send request line and headers
-    if  reqt.connectproxy then 
+    local h = _M.open(nreqt) 
+    if  reqt.connectproxy then
         nreqt.method = "CONNECT"
         h:sendrequestline(nreqt.method, nreqt.uri)
         h:sendheaders(nreqt.headers)
         local code, status = h:receivestatusline()       
         local headers = h:receiveheaders()
-        if code == 200 then
-            reqt.connectproxy = false
+        if code == 200 then            
             if url.parse(reqt.url, default).scheme == "https" then
+                -- the tunnel is established and we wrap the socket for https requests
                 h.c = h.try(ssl.wrap(h.c, nreqt))
                 h.try(h.c:dohandshake())
                 reg(h, getmetatable(h.c))
             end
             -- these go through the tunnel
             nreqt.method = "GET"
+            -- replace host and port so that requests go normally through tunnel
             nreqt.host, nreqt.port = reqt.host,reqt.port
             nreqt.uri = adjusturi(nreqt)
         else
@@ -361,6 +380,12 @@ end
         h:sendbody(nreqt.headers, nreqt.source, nreqt.step) 
     end
     local code, status = h:receivestatusline()
+    -- set the reqt.connectredirect variable to be used in the redirect function
+    if code == 301 and reqt.connectproxy == true then 
+        reqt.connectredirect = true
+    else
+        reqt.connectredirect = false
+    end
     -- if it is an HTTP/0.9 server, simply get the body and we are done
     if not code then
         h:receive09body(status, nreqt.sink, nreqt.step)
