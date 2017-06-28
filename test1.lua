@@ -23,11 +23,13 @@ local function doreq(url)
 	return result, code, headers, status
 end
 
-local result, code, headers, status = doreq("http://example.com/") 
--- local result, code, headers, status = doreq("https://rnikhil275.github.io") -- simple https
+-- local result, code, headers, status = doreq("http://example.com")--simple http 
+-- local result, code, headers, status = doreq("http://goo.gl/tBfqNu") -- http --> http redirect
 
--- local result, code, headers, status = doreq("http://goo.gl/tBfqNu") -- http --> http 
+-- local result, code, headers, status = doreq("https://rnikhil275.github.io") --simple https
 -- local result, code, headers, status = doreq("https://goo.gl/UBCUc5")  -- https --> https redirect
+
+-- local result, code, headers, status = doreq("http://goo.gl/UBCUc5")  -- http --> https redirect
 -- local result, code, headers, status = doreq("https://goo.gl/tBfqNu")  -- https --> http security test case 
 
 
