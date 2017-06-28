@@ -15,7 +15,7 @@ local function doreq(url)
 
 	local result, code, headers, status = https.request(reqt)
 	print("Fetching:",url,"==>",code, status)
-	if result then for k,v in pairs(headers) do print("",k,v) end end
+	-- if result then for k,v in pairs(headers) do print("",k,v) end end
 	-- print(result)
 	-- print(type(result))
 	print(inspect(result_table))
@@ -26,7 +26,7 @@ end
 -- local result, code, headers, status = doreq("http://example.com")--simple http 
 -- local result, code, headers, status = doreq("http://goo.gl/tBfqNu") -- http --> http redirect
 
--- local result, code, headers, status = doreq("https://rnikhil275.github.io") --simple https
+-- local result, code, headers, status = doreq("https://example.com") --simple https
 -- local result, code, headers, status = doreq("https://goo.gl/UBCUc5")  -- https --> https redirect
 
 -- local result, code, headers, status = doreq("http://goo.gl/UBCUc5")  -- http --> https redirect

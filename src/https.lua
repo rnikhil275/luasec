@@ -353,12 +353,11 @@ end
     -- we loop until we get what we want, or
     -- until we are sure there is no way to get it
     nreqt = adjustrequest(reqt)
-    local h = _M.open(nreqt) 
+    local h = _M.open(nreqt)
     if  reqt.connectproxy then
         nreqt.method = "CONNECT"
         h:sendrequestline(nreqt.method, nreqt.uri)
         h:sendheaders(nreqt.headers)
-        print("this happens")
         local code, status = h:receivestatusline()       
         local headers = h:receiveheaders()
         if code == 200 then            
@@ -377,7 +376,6 @@ end
             return nil, "Problem in establishing tunnel"
         end
     end
-
     h:sendrequestline(nreqt.method, nreqt.uri)
     h:sendheaders(nreqt.headers)
 
@@ -450,7 +448,6 @@ local function tcp(params)
            self.c = try(ssl.wrap(self.c, params))
            self.c:sni(host)
            try(self.c:dohandshake())
-           print("this got invoked https")
            reg(self, getmetatable(self.c))
            return 1
         end
