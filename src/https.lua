@@ -17,6 +17,7 @@ local base = _G
 local table = require("table")
 local ssl = require("ssl")
 local try = socket.try
+local inspect = require("inspect")
 -----------------------------------------------------------------------------
 -- Program constants and the module
 -----------------------------------------------------------------------------
@@ -362,6 +363,8 @@ end
         local headers = h:receiveheaders()
         if code == 200 then            
             if url.parse(reqt.url, default).scheme == "https" then
+                print("tunnel estalisg")
+                washttps = true
                 -- the tunnel is established and we wrap the socket for https requests
                 h.c = h.try(ssl.wrap(h.c, nreqt))
                 h.try(h.c:dohandshake())
@@ -404,9 +407,20 @@ end
     headers = h:receiveheaders()
     -- at this point we should have a honest reply from the server
     -- we can't redirect if we already used the source, so we report the error 
+    -- print(inspect(reqt))
+    -- print(inspect(nreqt))
+
     if shouldredirect(nreqt, code, headers) and not nreqt.source then
-        h:close()
-        return tredirect(reqt, headers.location)
+        print(washttps)
+        print(reqt.unsaferedirect)
+        if washttps and reqt.unsaferedirect ~=true and url.parse(headers.location,default).scheme == "http" then
+          return nil, "Unsafe redirects from HTTPS to HTTP not allowed"
+        else
+          h:close()
+          return tredirect(reqt, headers.location)
+        end
+        
+
     end
     -- here we are finally done
     if shouldreceivebody(nreqt, code) then
