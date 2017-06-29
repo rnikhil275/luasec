@@ -17,7 +17,6 @@ local base = _G
 local table = require("table")
 local ssl = require("ssl")
 local try = socket.try
-local inspect = require("inspect")
 -----------------------------------------------------------------------------
 -- Program constants and the module
 -----------------------------------------------------------------------------
@@ -412,7 +411,6 @@ end
           return nil, "Unsafe redirects from HTTPS to HTTP not allowed"
         else
           if not washttps and url.parse(headers.location, default).scheme == "https" and reqt.proxy then
-            print(inspect(reqt))
             reqt.connectredirect = true
           end
           h:close()
