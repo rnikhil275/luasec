@@ -17,6 +17,7 @@ local base = _G
 local table = require("table")
 local ssl = require("ssl")
 local try = socket.try
+local inspect = require("inspect")
 -----------------------------------------------------------------------------
 -- Program constants and the module
 -----------------------------------------------------------------------------
@@ -313,7 +314,7 @@ local trequest, tredirect
             proxy = reqt.proxy, 
             nredirects = (reqt.nredirects or 0) + 1,
             create = reqt.create,
-            connectproxy = reqt.connectproxy,
+            connectproxy = true,
             protocol = "any",
             options  = {"all", "no_sslv2", "no_sslv3"},
             verify   = "none",
@@ -410,6 +411,10 @@ end
         if washttps and reqt.unsaferedirect ~=true and url.parse(headers.location,default).scheme == "http" then
           return nil, "Unsafe redirects from HTTPS to HTTP not allowed"
         else
+          if not washttps and url.parse(headers.location, default).scheme == "https" and reqt.proxy then
+            print(inspect(reqt))
+            reqt.connectredirect = true
+          end
           h:close()
           return tredirect(reqt, headers.location)
         end
