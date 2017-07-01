@@ -364,7 +364,7 @@ function trequest(reqt)
                 h.c = h.try(ssl.wrap(h.c, nreqt))
                 h.c:sni(nreqt.host)
                 h.try(h.c:dohandshake())
-                forwardcall(h, getmetatable(h.c))
+                forwardcall(h)
             end
             -- these go through the tunnel
             nreqt.method = "GET"
@@ -455,7 +455,7 @@ local function tcp(params)
            self.c = try(ssl.wrap(self.c, params))
            self.c:sni(host)
            try(self.c:dohandshake())
-           forwardcall(self, getmetatable(self.c))
+           forwardcall(self)
            return 1
         end
         -- insert https default port, overriding http port inserted by LuaSocket
