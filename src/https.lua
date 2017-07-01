@@ -307,39 +307,28 @@ end
 local trequest, tredirect
 
 function tredirect(reqt, location)
-    local params ={
-    
+    local parameters ={
+            -- the RFC says the redirect URL has to be absolute, but some
+            -- servers do not respect that
+            url = url.absolute(reqt.url, location),
+            source = reqt.source,
+            sink = reqt.sink,
+            headers = reqt.headers,
+            proxy = reqt.proxy, 
+            nredirects = (reqt.nredirects or 0) + 1,
+            create = reqt.create,
+            connectproxy = reqt.connectproxy      
       }
     if reqt.connectredirect == true then
-        local result, code, headers, status = trequest {
-            -- the RFC says the redirect URL has to be absolute, but some
-            -- servers do not respect that
-            url = url.absolute(reqt.url, location),
-            source = reqt.source,
-            sink = reqt.sink,
-            headers = reqt.headers,
-            proxy = reqt.proxy, 
-            nredirects = (reqt.nredirects or 0) + 1,
-            create = reqt.create,
-            connectproxy = true,
-            protocol = "any",
-            options  = {"all", "no_sslv2", "no_sslv3"},
-            verify   = "none",
-            mode = "client"
-        }
+       -- modify this for connect tunnel redirects 
+        parameters.connectproxy = true
+        parameters.mode = "client"
+        for k, v in pairs(cfg) do 
+          parameters[k] = v
+        end
+        local result, code, headers, status = trequest(parameters)
     elseif reqt.connectredirect == false then
-        local result, code, headers, status = trequest {
-            -- the RFC says the redirect URL has to be absolute, but some
-            -- servers do not respect that
-            url = url.absolute(reqt.url, location),
-            source = reqt.source,
-            sink = reqt.sink,
-            headers = reqt.headers,
-            proxy = reqt.proxy, 
-            nredirects = (reqt.nredirects or 0) + 1,
-            create = reqt.create,
-            connectproxy = reqt.connectproxy
-        }
+        local result, code, headers, status = trequest(parameters)
     end
     -- pass location header back as a hint we redirected
     headers = headers or {}
