@@ -68,7 +68,7 @@ end
 -----------------------------------------------------------------------------
 -- Extra sources and sinks
 -----------------------------------------------------------------------------
-socket.sourcet["http-chunked"] = function(sock, headers)
+socket.sourcet["https-chunked"] = function(sock, headers)
     return base.setmetatable({
         getfd = function() return sock:getfd() end,
         dirty = function() return sock:dirty() end
@@ -94,7 +94,7 @@ socket.sourcet["http-chunked"] = function(sock, headers)
     })
 end
 
-socket.sinkt["http-chunked"] = function(sock)
+socket.sinkt["https-chunked"] = function(sock)
     return base.setmetatable({
         getfd = function() return sock:getfd() end,
         dirty = function() return sock:dirty() end
@@ -143,7 +143,7 @@ function metat.__index:sendbody(headers, source, step)
     source = source or ltn12.source.empty()
     step = step or ltn12.pump.step
     -- if we don't know the size in advance, send chunked and hope for the best
-    local mode = "http-chunked"
+    local mode = "https-chunked"
     if headers["content-length"] then mode = "keep-open" end
     return self.try(ltn12.pump.all(source, socket.sink(mode, self.c), step))
 end
@@ -169,7 +169,7 @@ function metat.__index:receivebody(headers, sink, step)
     local length = base.tonumber(headers["content-length"])
     local t = headers["transfer-encoding"] -- shortcut
     local mode = "default" -- connection close
-    if t and t ~= "identity" then mode = "http-chunked"
+    if t and t ~= "identity" then mode = "https-chunked"
     elseif base.tonumber(headers["content-length"]) then mode = "by-length" end
     return self.try(ltn12.pump.all(socket.source(mode, self.c, length),
         sink, step))
@@ -301,7 +301,10 @@ end
 -- forward declarations
 local trequest, tredirect
 
---[[local]] function tredirect(reqt, location)
+function tredirect(reqt, location)
+    local params ={
+    
+      }
     if reqt.connectredirect == true then
         local result, code, headers, status = trequest {
             -- the RFC says the redirect URL has to be absolute, but some
@@ -339,7 +342,7 @@ local trequest, tredirect
     return result, code, headers, status
 end
 -- forward calls to connection object
-local function reg(conn)
+local function forwardcall(conn)
    local mt = getmetatable(conn.c).__index
    for name, method in pairs(mt) do
       if type(method) == "function" then
@@ -349,7 +352,7 @@ local function reg(conn)
       end
    end
 end
---[[local]] function trequest(reqt)
+function trequest(reqt)
     -- we loop until we get what we want, or
     -- until we are sure there is no way to get it
     nreqt = adjustrequest(reqt)
@@ -362,11 +365,11 @@ end
         local headers = h:receiveheaders()
         if code == 200 then            
             if url.parse(reqt.url, default).scheme == "https" then
-                washttps = true
+                reqt.washttps = true
                 -- the tunnel is established and we wrap the socket for https requests
                 h.c = h.try(ssl.wrap(h.c, nreqt))
                 h.try(h.c:dohandshake())
-                reg(h, getmetatable(h.c))
+                forwardcall(h, getmetatable(h.c))
             end
             -- these go through the tunnel
             nreqt.method = "GET"
@@ -407,10 +410,10 @@ end
     -- we can't redirect if we already used the source, so we report the error 
 
     if shouldredirect(nreqt, code, headers) and not nreqt.source then
-        if washttps and reqt.unsaferedirect ~=true and url.parse(headers.location,default).scheme == "http" then
+        if reqt.washttps and reqt.unsaferedirect ~=true and url.parse(headers.location,default).scheme == "http" then
           return nil, "Unsafe redirects from HTTPS to HTTP not allowed"
         else
-          if not washttps and url.parse(headers.location, default).scheme == "https" and reqt.proxy then
+          if not reqt.washttps and url.parse(headers.location, default).scheme == "https" and reqt.proxy then
             reqt.connectredirect = true
           end
           h:close()
@@ -457,7 +460,7 @@ local function tcp(params)
            self.c = try(ssl.wrap(self.c, params))
            self.c:sni(host)
            try(self.c:dohandshake())
-           reg(self, getmetatable(self.c))
+           forwardcall(self, getmetatable(self.c))
            return 1
         end
         -- insert https default port, overriding http port inserted by LuaSocket
