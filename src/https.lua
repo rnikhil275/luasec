@@ -191,7 +191,7 @@ end
 local function adjusturi(reqt)
     local u = reqt
     -- if there is a proxy, we need the full url. otherwise, just a part.
-    if not reqt.proxy and not _M.PROXY then
+    if not reqt.proxy then
         u = {
            path = socket.try(reqt.path, "invalid path 'nil'"),
            params = reqt.params,
@@ -218,7 +218,7 @@ local function adjustheaders(reqt)
             "Basic " ..  (mime.b64(reqt.user .. ":" ..
         url.unescape(reqt.password)))
     end
-    local proxy = reqt.proxy or _M.PROXY
+    local proxy = reqt.proxy
     if proxy then
         proxy = url.parse(proxy)
         if proxy.user and proxy.password then
@@ -246,7 +246,7 @@ local default = {
     scheme = "http"
 }
 local function adjustproxy(reqt)
-    local proxy = reqt.proxy or _M.PROXY
+    local proxy = reqt.proxy
     if proxy then
         proxy = url.parse(proxy)
         return proxy.host, proxy.port or 3128
@@ -261,6 +261,11 @@ local function adjustrequest(reqt)
     -- explicit components override url
     for i,v in base.pairs(reqt) do nreqt[i] = v end
     if nreqt.port == "" then nreqt.port = _M.PORT end
+    if url.parse(reqt.url, default).scheme == "https" then
+            nreqt.port = _M.SSLPORT
+        else
+            nreqt.port = _M.PORT
+        end
     socket.try(nreqt.host and nreqt.host ~= "", 
         "invalid host '" .. base.tostring(nreqt.host) .. "'")
     -- compute uri if user hasn't overriden
