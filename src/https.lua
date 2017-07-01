@@ -373,6 +373,7 @@ function trequest(reqt)
                 reqt.washttps = true
                 -- the tunnel is established and we wrap the socket for https requests
                 h.c = h.try(ssl.wrap(h.c, nreqt))
+                h.c:sni(nreqt.host)
                 h.try(h.c:dohandshake())
                 forwardcall(h, getmetatable(h.c))
             end
