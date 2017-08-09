@@ -383,12 +383,7 @@ function trequest(reqt)
 		h:sendbody(nreqt.headers, nreqt.source, nreqt.step) 
 	end
 	local code, status = h:receivestatusline()
-	-- set the reqt.connectredirect variable to be used in the redirect function
-	if code == 301 and reqt.connectproxy == true then 
-		reqt.connectredirect = true
-	else
-		reqt.connectredirect = false
-	end
+	
 	-- if it is an HTTP/0.9 server, simply get the body and we are done
 	if not code then
 		h:receive09body(status, nreqt.sink, nreqt.step)
@@ -405,6 +400,12 @@ function trequest(reqt)
 	-- we can't redirect if we already used the source, so we report the error 
 
 	if shouldredirect(nreqt, code, headers) and not nreqt.source then
+			-- set the reqt.connectredirect variable to be used in the redirect function
+		if (code == 301 or code == 302 or code == 303 or code == 307) and reqt.connectproxy == true then 
+			reqt.connectredirect = true
+		else
+			reqt.connectredirect = false
+		end
 		if reqt.washttps and reqt.unsaferedirect ~=true and url.parse(headers.location,default).scheme == "http" then
 		  return nil, "Unsafe redirects from HTTPS to HTTP not allowed"
 		else
