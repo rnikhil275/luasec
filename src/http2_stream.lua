@@ -208,7 +208,7 @@ function metat.__index:sendconnectionpreface()
 end
 
 
-function metat.__index:send_http2_frame(stream_id,frame_types, flags, payload)
+function metat.__index:write_http2_frame(stream_id,frame_types, flags, payload)
 
 
 	local header = spack(">I3 B B I4", #payload, frame_types, flags, stream_id)
@@ -229,13 +229,13 @@ function metat.__index:send_settings_frame(ACK, settings)
 		local flags = 0x1
 		local payload = ""
 		local stream_id = 0
-		self:send_http2_frame(stream_id, frame_types.SETTING, flags, payload)
+		self:write_http2_frame(stream_id, frame_types.SETTING, flags, payload)
 
 	else
 		flags = 0
 		local payload = pack_settings_payload(default_settings)
 		local stream_id = 0
-		self:send_http2_frame(stream_id, frame_types.SETTING, flags, payload)
+		self:write_http2_frame(stream_id, frame_types.SETTING, flags, payload)
 	end	
 	
 
@@ -446,7 +446,7 @@ function metat.___index:send_ping_frame()
 	return self:write_http2_frame(frame_types.PING, flags, payload)
 end
 
-function metat.___index:send_write_continuation_frame()
+function metat.___index:send_continuation_frame()
 	self.state ~= "closed" and self.state ~= "half closed (local)"
 	local flags = 0
 	if end_headers then
