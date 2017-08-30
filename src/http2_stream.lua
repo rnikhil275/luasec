@@ -218,7 +218,36 @@ function metat.__index:write_http2_frame(stream_id,frame_types, flags, payload)
 
     return 1
 end
-
+function metat.__index:read_http2_frame(timeout)
+	local deadline = timeout and (monotime()+timeout)
+	local frame_header, err, errno = self.socket:select(9, timeout)
+	self.had_eagain = false
+	local size, typ, flags, streamid = sunpack(">I3 B B I4", frame_header)
+	if size > self.acked_settings[known_settings.MAX_FRAME_SIZE] then
+		local ok, errno2 = self.socket:select(frame_header)
+		if not ok then
+		end
+	end
+	local payload, err2, errno2 = self.socket:read(size, 0)
+	self.had_eagain = false
+	if payload and #payload < size then -- hit EOF
+		local ok, errno4 = self.socket:read(payload)
+		if not ok then
+		end
+		payload = nil
+	end
+	if payload == nil then
+		-- put frame header back into socket so a retry will work
+		local ok, errno3 = self.socket:select(frame_header)
+		if not ok then
+		end
+		
+		return nil, err2, errno2
+	end
+	-- reserved bit MUST be ignored by receivers
+	streamid = band(streamid, 0x7fffffff)
+	return typ, flags, streamid, payload
+end
 function metat.__index:send_settings_frame(ACK, settings)
 
 	-- flags is for setting the ack bit
@@ -298,7 +327,7 @@ function metat.___index:set_state(new)
 		end
 	end
 end
-
+local connection ={}
 function metat.___index:send_goaway_frame()
 	if self.id ~= 0 then
 		h2_errors.PROTOCOL_ERROR("'GOAWAY' frames MUST be on stream 0")
@@ -322,6 +351,12 @@ function metat.___index:send_goaway_frame()
 		return true
 	end
 
+end
+function connection:write_goaway_frame(last_stream_id, err_code, debug_msg, timeout)
+	if last_stream_id == nil then
+		last_stream_id = math.max(self.highest_odd_stream, self.highest_even_stream)
+	end
+	return self.stream0:send_goaway_frame(last_stream_id, err_code, debug_msg, timeout)
 end
 function metat.___index:send_data_frame()
 	if self.id == 0 then
@@ -445,7 +480,30 @@ function metat.___index:send_ping_frame()
 	local flags = ACK and 0x1 or 0
 	return self:write_http2_frame(frame_types.PING, flags, payload)
 end
-
+function connection:ping(timeout)
+	local deadline = timeout and (monotime()+timeout)
+	local payload
+	-- generate a random, unique payload
+	repeat -- keep generating until we don't have a collision
+		payload = rand.bytes(8)
+	until self.pongs[payload] == nil
+	local cond = cc.new()
+	self.pongs[payload] = cond
+	assert(self.stream0:send_ping_frame(false, payload, timeout))
+	while self.pongs[payload] do
+		timeout = deadline and (deadline-monotime())
+		local which = cqueues.poll(cond, self, timeout)
+		if which == self then
+			local ok, err, errno = self:step(0)
+			if not ok then
+				return nil, err, errno
+			end
+		elseif which == timeout then
+			return nil, onerror(self.socket, "ping", ce.ETIMEDOUT)
+		end
+	end
+	return true
+end
 function metat.___index:send_continuation_frame()
 	self.state ~= "closed" and self.state ~= "half closed (local)"
 	local flags = 0
