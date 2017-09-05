@@ -1,3 +1,6 @@
+-- Certain functions in this module(which are used for creating different kinds of frames) are heavily based on the lua-http module. They have been taken form lua-http and modified to work with luasocket. 
+
+
 package.path =  package.path .. ';/vagrant/luasec/src/?.lua'
 
 local inspect = require("inspect")
@@ -492,7 +495,7 @@ function connection:ping(timeout)
 	assert(self.stream0:send_ping_frame(false, payload, timeout))
 	while self.pongs[payload] do
 		timeout = deadline and (deadline-monotime())
-		local which = cqueues.poll(cond, self, timeout)
+		local which = socket.select(cond,timeout)
 		if which == self then
 			local ok, err, errno = self:step(0)
 			if not ok then

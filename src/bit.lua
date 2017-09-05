@@ -1,4 +1,6 @@
---[[ This module smooths over all the various lua bit libraries
+--[[ This module smooths over all the various lua bit libraries. 
+
+This module was taken from lua-http module with slight modifications to support the required scenarios. 
 
 The bit operations are only done
   - on bytes (8 bits),

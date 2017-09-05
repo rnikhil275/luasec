@@ -1,5 +1,7 @@
 --[[
 The data returned is of the form 'name', 'code', 'description'. 
+
+This module was adapted from lua-http to work with luasec. 
 ]]
 
 local errors = {}
